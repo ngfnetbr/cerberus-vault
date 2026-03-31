@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Cinzel+Decorative:wght@400;700;900&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 210 20% 92%;
+
+    --primary: 152 60% 45%;
+    --primary-foreground: 220 20% 6%;
+
+    --secondary: 220 16% 16%;
+    --secondary-foreground: 210 20% 80%;
+
+    --muted: 220 14% 14%;
+    --muted-foreground: 215 12% 50%;
+
+    --accent: 152 40% 20%;
+    --accent-foreground: 152 60% 70%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 152 60% 45%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 152 60% 45%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 14% 14%;
+    --sidebar-accent-foreground: 210 20% 80%;
+    --sidebar-border: 220 14% 18%;
+    --sidebar-ring: 152 60% 45%;
+
+    --vault-glow: 152 60% 45%;
+    --vault-surface: 220 16% 12%;
+    --vault-surface-hover: 220 16% 15%;
+    --vault-danger: 0 72% 51%;
+    --vault-warning: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  code, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .vault-glow {
+    box-shadow: 0 0 20px hsl(var(--vault-glow) / 0.15),
+                0 0 60px hsl(var(--vault-glow) / 0.05);
+  }
+
+  .vault-glow-sm {
+    box-shadow: 0 0 10px hsl(var(--vault-glow) / 0.1);
+  }
+
+  .vault-gradient {
+    background: linear-gradient(135deg, hsl(var(--vault-surface)), hsl(var(--card)));
+  }
+
+  .vault-text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(152 80% 65%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* Vault unlock cinematic sequence */
+@keyframes vault-shake {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-4px, 2px); }
+  20% { transform: translate(4px, -2px); }
+  30% { transform: translate(-3px, -1px); }
+  40% { transform: translate(3px, 1px); }
+  50% { transform: translate(-2px, 2px); }
+  60% { transform: translate(2px, -1px); }
+  70% { transform: translate(-1px, 1px); }
+  80% { transform: translate(1px, 0px); }
+}
+
+@keyframes vault-door-left-open {
+  0% { transform: perspective(1200px) rotateY(0deg); }
+  30% { transform: perspective(1200px) rotateY(-3deg); }
+  100% { transform: perspective(1200px) rotateY(-95deg); }
+}
+
+@keyframes vault-door-right-open {
+  0% { transform: perspective(1200px) rotateY(0deg); }
+  30% { transform: perspective(1200px) rotateY(3deg); }
+  100% { transform: perspective(1200px) rotateY(95deg); }
+}
+
+@keyframes vault-glow-burst {
+  0% { opacity: 0; transform: scale(0.3); }
+  40% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2); }
+}
+
+@keyframes vault-center-light {
+  0% { opacity: 0; width: 2px; }
+  20% { opacity: 1; width: 2px; }
+  60% { opacity: 1; width: 100vw; }
+  100% { opacity: 0; width: 100vw; }
+}
+
+@keyframes vault-form-shrink {
+  0% { opacity: 1; transform: scale(1); filter: brightness(1); }
+  50% { opacity: 0.8; transform: scale(0.95); filter: brightness(1.5); }
+  100% { opacity: 0; transform: scale(0.6); filter: brightness(3); }
+}
+
+.vault-shake {
+  animation: vault-shake 0.6s ease-in-out;
+}
+
+.vault-door-left-anim {
+  animation: vault-door-left-open 1.4s cubic-bezier(0.2, 0, 0.2, 1) forwards;
+  animation-delay: 0.5s;
+}
+
+.vault-door-right-anim {
+  animation: vault-door-right-open 1.4s cubic-bezier(0.2, 0, 0.2, 1) forwards;
+  animation-delay: 0.5s;
+}
+
+.vault-glow-burst {
+  animation: vault-glow-burst 1.8s ease-out forwards;
+  animation-delay: 0.8s;
+  opacity: 0;
+}
+
+.vault-center-light {
+  animation: vault-center-light 1.6s ease-out forwards;
+  animation-delay: 0.6s;
+  opacity: 0;
+}
+
+.vault-form-shrink {
+  animation: vault-form-shrink 0.6s ease-in forwards;
+}
+
+@keyframes vault-white-flash {
+  0% { opacity: 0; }
+  60% { opacity: 0.9; }
+  100% { opacity: 1; }
+}
+
+@keyframes vault-particle {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  15% { opacity: var(--p-opacity, 0.7); }
+  100% { opacity: 0; transform: translate(var(--dx, 100px), var(--dy, -100px)) scale(0); }
+}
