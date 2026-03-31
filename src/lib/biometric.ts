@@ -111,7 +111,9 @@ export async function registerBiometric(masterPassword: string): Promise<boolean
 
     return true;
   } catch (err) {
-    console.error('Biometric registration failed:', err);
+    if (!(err instanceof DOMException && err.name === 'NotAllowedError')) {
+      console.error('Biometric registration failed:', err);
+    }
     return false;
   }
 }
@@ -143,7 +145,9 @@ export async function authenticateWithBiometric(): Promise<string | null> {
     const stored = localStorage.getItem(BIOMETRIC_ENCRYPTED_PW_KEY)!;
     return deobfuscate(stored);
   } catch (err) {
-    console.error('Biometric auth failed:', err);
+    if (!(err instanceof DOMException && err.name === 'NotAllowedError')) {
+      console.error('Biometric auth failed:', err);
+    }
     return null;
   }
 }

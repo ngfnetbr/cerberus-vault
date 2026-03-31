@@ -10,14 +10,14 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import MobileSidebar from './MobileSidebar';
 import { getEntries, saveEntries, getGroups, saveGroups, getTags, saveTags, deleteTag, getMasterHash, setMasterHash, updateEntry, type VaultEntry, type VaultGroup } from '@/lib/vault-store';
 import { useToast } from '@/hooks/use-toast';
-import { decrypt } from '@/lib/crypto';
+import { decrypt, verifyMasterPassword } from '@/lib/crypto';
 import { isFileSystemSupported, isFileLinked, pickDirectory, unlinkFile, loadFromFile, getLinkedFileName } from '@/lib/file-sync';
 import { useFileSync } from '@/hooks/use-file-sync';
 import VaultEntryCard from './VaultEntryCard';
 import VaultEntryForm from './VaultEntryForm';
 import VaultSidebar from './VaultSidebar';
 import VaultSettingsDialog, { getSettings, type VaultSettings } from './VaultSettings';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import ExportDialog, { type VaultExportData } from './ExportDialog';
 import ImportConfirmDialog, { type ImportSummary } from './ImportConfirmDialog';
@@ -226,6 +226,37 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
     toast({ title: `${count} ${count === 1 ? 'senha exportada' : 'senhas exportadas'}!` });
   };
 
+  const areEntriesEquivalent = (current: VaultEntry, incoming: VaultEntry) => {
+    return current.site === incoming.site &&
+      current.username === incoming.username &&
+      current.authType === incoming.authType &&
+      current.isFavorite === incoming.isFavorite &&
+      current.useCount === incoming.useCount &&
+      current.lastUsedAt === incoming.lastUsedAt &&
+      current.encryptedPassword === incoming.encryptedPassword &&
+      current.notes === incoming.notes &&
+      current.groupId === incoming.groupId &&
+      JSON.stringify(current.tags ?? []) === JSON.stringify(incoming.tags ?? []) &&
+      current.createdAt === incoming.createdAt &&
+      current.updatedAt === incoming.updatedAt;
+  };
+
+  const isImportDataCompatible = async (data: VaultExportData) => {
+    if (data.masterHash) {
+      return verifyMasterPassword(masterPassword, data.masterHash);
+    }
+
+    const sampleEntry = data.entries.find(entry => entry.encryptedPassword);
+    if (!sampleEntry) return true;
+
+    try {
+      await decrypt(sampleEntry.encryptedPassword, masterPassword);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const parseImportFile = (raw: string): VaultExportData | null => {
     const parsed = JSON.parse(raw);
     // Support v2 format
@@ -251,9 +282,23 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
           toast({ title: 'Arquivo inválido', variant: 'destructive' });
           return;
         }
+        const isImportCompatible = await isImportDataCompatible(data);
+        if (!isImportCompatible) {
+          toast({
+            title: 'Senha mestra incompatível',
+            description: 'Esse backup foi criptografado com outra senha mestra.',
+            variant: 'destructive',
+          });
+          return;
+        }
         const existing = getEntries();
-        const existingIds = new Set(existing.map(e => e.id));
-        const newEntries = data.entries.filter(e => !existingIds.has(e.id));
+        const existingEntriesById = new Map(existing.map(entry => [entry.id, entry]));
+        const newEntries = data.entries.filter(entry => !existingEntriesById.has(entry.id));
+        const updatedEntries = data.entries.filter(entry => {
+          const currentEntry = existingEntriesById.get(entry.id);
+          return currentEntry ? !areEntriesEquivalent(currentEntry, entry) : false;
+        });
+        const duplicateCount = data.entries.length - newEntries.length - updatedEntries.length;
 
         const existingGroups = getGroups();
         const existingGroupIds = new Set(existingGroups.map(g => g.id));
@@ -265,7 +310,8 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
 
         const summary: ImportSummary = {
           newEntries,
-          duplicateCount: data.entries.length - newEntries.length,
+          updatedEntries,
+          duplicateCount,
           newGroups,
           newTags,
           totalImported: data.entries.length,
@@ -283,10 +329,14 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
 
   const confirmImport = () => {
     if (!importSummary || !pendingImportData) return;
-    const { newEntries, newGroups, newTags } = importSummary;
+    const { newEntries, updatedEntries, newGroups, newTags } = importSummary;
 
-    if (newEntries.length > 0) {
-      saveEntries([...getEntries(), ...newEntries]);
+    if (newEntries.length > 0 || updatedEntries.length > 0) {
+      const entriesById = new Map(getEntries().map(entry => [entry.id, entry]));
+      [...updatedEntries, ...newEntries].forEach(entry => {
+        entriesById.set(entry.id, entry);
+      });
+      saveEntries(Array.from(entriesById.values()));
     }
     if (newGroups.length > 0) {
       saveGroups([...getGroups(), ...newGroups]);
@@ -304,6 +354,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
 
     const parts: string[] = [];
     if (newEntries.length > 0) parts.push(`${newEntries.length} ${newEntries.length === 1 ? 'senha' : 'senhas'}`);
+    if (updatedEntries.length > 0) parts.push(`${updatedEntries.length} ${updatedEntries.length === 1 ? 'senha atualizada' : 'senhas atualizadas'}`);
     if (newGroups.length > 0) parts.push(`${newGroups.length} ${newGroups.length === 1 ? 'grupo' : 'grupos'}`);
     if (newTags.length > 0) parts.push(`${newTags.length} ${newTags.length === 1 ? 'tag' : 'tags'}`);
     toast({ title: `Importado: ${parts.join(', ')}` });
@@ -325,6 +376,17 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
       // Load existing data from file if it has content
       const fileData = await loadFromFile();
       if (fileData && fileData.entries.length > 0) {
+        const isLinkedFileCompatible = await verifyMasterPassword(masterPassword, fileData.masterHash);
+        if (!isLinkedFileCompatible) {
+          unlinkFile();
+          setFileLinked(false);
+          toast({
+            title: 'Arquivo incompatível',
+            description: 'O arquivo local usa outra senha mestra e não pode ser vinculado nesta sessão.',
+            variant: 'destructive',
+          });
+          return;
+        }
         // Merge file data into localStorage
         const existingEntries = getEntries();
         const existingIds = new Set(existingEntries.map(e => e.id));
@@ -606,6 +668,9 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
             <DialogTitle className="font-mono">
               {editingEntry ? 'Editar entrada' : 'Nova entrada'}
             </DialogTitle>
+            <DialogDescription>
+              {editingEntry ? 'Atualize os dados da credencial selecionada.' : 'Cadastre uma nova credencial no cofre.'}
+            </DialogDescription>
           </DialogHeader>
           <VaultEntryForm
             masterPassword={masterPassword}
@@ -623,6 +688,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPas
         entries={entries}
         groups={groups}
         tags={tags}
+        masterHash={getMasterHash()}
         onExport={handleExport}
       />
 

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { decrypt, encrypt, hashMasterPassword, verifyMasterPassword } from '@/lib/crypto';
 import { isBiometricSupported, isBiometricEnabled, disableBiometric, registerBiometric, updateBiometricPassword } from '@/lib/biometric';
@@ -152,6 +152,9 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMa
       <DialogContent className="bg-card border-border sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-mono">Configurações</DialogTitle>
+          <DialogDescription>
+            Ajuste segurança, biometria e a senha mestra do cofre.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="space-y-2">

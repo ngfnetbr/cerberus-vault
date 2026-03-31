@@ -23,7 +23,7 @@ export default defineConfig(() => ({
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       },
-      includeAssets: ["favicon.png", "robots.txt"],
+      includeAssets: ["favicon.png", "pwa-192x192.png", "pwa-512x512.png", "robots.txt"],
       manifest: {
         name: "Cerberus - Gerenciador de Senhas",
         short_name: "Cerberus",

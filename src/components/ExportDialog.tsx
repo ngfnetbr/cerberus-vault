@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Download, Search, CheckSquare, Square, FolderTree, Tag } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,6 +14,7 @@ export interface VaultExportData {
   groups?: VaultGroup[];
   tags?: string[];
   exportedAt: string;
+  masterHash?: string;
   version: 2;
 }
 
@@ -23,10 +24,11 @@ interface ExportDialogProps {
   entries: VaultEntry[];
   groups: VaultGroup[];
   tags: string[];
+  masterHash?: string | null;
   onExport: (data: VaultExportData) => void;
 }
 
-const ExportDialog = ({ open, onOpenChange, entries, groups, tags, onExport }: ExportDialogProps) => {
+const ExportDialog = ({ open, onOpenChange, entries, groups, tags, masterHash, onExport }: ExportDialogProps) => {
   const [selected, setSelected] = useState<Set<string>>(new Set(entries.map(e => e.id)));
   const [search, setSearch] = useState('');
   const [includeGroups, setIncludeGroups] = useState(true);
@@ -73,6 +75,7 @@ const ExportDialog = ({ open, onOpenChange, entries, groups, tags, onExport }: E
       groups: includeGroups ? groups.filter(g => usedGroupIds.has(g.id)) : undefined,
       tags: includeTags ? tags.filter(t => usedTags.has(t)) : undefined,
       exportedAt: new Date().toISOString(),
+      masterHash: masterHash || undefined,
       version: 2,
     };
     onExport(data);
@@ -87,6 +90,9 @@ const ExportDialog = ({ open, onOpenChange, entries, groups, tags, onExport }: E
             <Download className="w-4 h-4" />
             Exportar senhas
           </DialogTitle>
+          <DialogDescription>
+            Selecione quais entradas deseja exportar do cofre atual.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

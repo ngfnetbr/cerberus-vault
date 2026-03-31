@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { hashMasterPassword, verifyMasterPassword } from '@/lib/crypto';
 import { getMasterHash, setMasterHash } from '@/lib/vault-store';
-import { isBiometricSupported, isBiometricEnabled, authenticateWithBiometric, registerBiometric } from '@/lib/biometric';
+import { isBiometricSupported, isBiometricEnabled, authenticateWithBiometric } from '@/lib/biometric';
 import { useToast } from '@/hooks/use-toast';
 import MatrixBackground from '@/components/MatrixBackground';
 
@@ -170,19 +170,12 @@ const VaultLock = ({ onUnlock }: VaultLockProps) => {
         }
         const hash = await hashMasterPassword(password);
         setMasterHash(hash);
-        // Auto-offer biometric registration on new vault if supported
-        if (isBiometricSupported()) {
-          registerBiometric(password).catch(() => {});
-        }
         toast({ title: 'Cofre criado!', description: 'Sua senha mestra foi configurada.' });
         playUnlockSequence(password);
       } else {
         const hash = getMasterHash()!;
         const valid = await verifyMasterPassword(password, hash);
         if (valid) {
-          if (isBiometricSupported() && !isBiometricEnabled()) {
-            registerBiometric(password).catch(() => {});
-          }
           playUnlockSequence(password);
         } else {
           new Audio('/sounds/rugido-de-bestia.mp3').play().catch(() => {});
