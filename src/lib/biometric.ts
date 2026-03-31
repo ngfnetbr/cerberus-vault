@@ -21,6 +21,14 @@ export function disableBiometric(): void {
   localStorage.removeItem(BIOMETRIC_ENCRYPTED_PW_KEY);
 }
 
+export function updateBiometricPassword(masterPassword: string): void {
+  if (!isBiometricEnabled()) return;
+
+  const key = generateObfuscationKey(32);
+  const encrypted = obfuscate(masterPassword, key);
+  localStorage.setItem(BIOMETRIC_ENCRYPTED_PW_KEY, encrypted);
+}
+
 // Simple XOR-based obfuscation with a random key stored alongside
 // Security note: This is convenience-level protection (the real gate is the biometric prompt)
 function generateObfuscationKey(length: number): Uint8Array {

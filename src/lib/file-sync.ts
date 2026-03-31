@@ -18,6 +18,19 @@ let dirHandle: FileSystemDirectoryHandle | null = null;
 
 const VAULT_FILENAME = 'cerberus-vault.json';
 
+interface FileSystemPermissionDescriptorWithMode {
+  mode: 'read' | 'readwrite';
+}
+
+interface FileSystemHandleWithPermissions {
+  queryPermission(descriptor?: FileSystemPermissionDescriptorWithMode): Promise<PermissionState>;
+  requestPermission(descriptor?: FileSystemPermissionDescriptorWithMode): Promise<PermissionState>;
+}
+
+interface DirectoryPickerWindow extends Window {
+  showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+}
+
 export function isFileSystemSupported(): boolean {
   return 'showDirectoryPicker' in window;
 }
@@ -29,7 +42,9 @@ export function isFileLinked(): boolean {
 export async function pickDirectory(): Promise<boolean> {
   if (!isFileSystemSupported()) return false;
   try {
-    dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+    const directoryWindow = window as DirectoryPickerWindow;
+    if (!directoryWindow.showDirectoryPicker) return false;
+    dirHandle = await directoryWindow.showDirectoryPicker({ mode: 'readwrite' });
     try {
       fileHandle = await dirHandle!.getFileHandle(VAULT_FILENAME, { create: false });
     } catch {
@@ -38,8 +53,8 @@ export async function pickDirectory(): Promise<boolean> {
     }
     localStorage.setItem(FILE_HANDLE_KEY, 'true');
     return true;
-  } catch (err: any) {
-    if (err.name === 'AbortError') return false; // User cancelled
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return false;
     console.error('Failed to pick directory:', err);
     return false;
   }
@@ -49,9 +64,10 @@ export async function saveToFile(data: VaultFileData): Promise<boolean> {
   if (!fileHandle) return false;
   try {
     // Verify permission
-    const permission = await (fileHandle as any).queryPermission({ mode: 'readwrite' });
+    const handleWithPermissions = fileHandle as FileSystemFileHandle & FileSystemHandleWithPermissions;
+    const permission = await handleWithPermissions.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted') {
-      const request = await (fileHandle as any).requestPermission({ mode: 'readwrite' });
+      const request = await handleWithPermissions.requestPermission({ mode: 'readwrite' });
       if (request !== 'granted') return false;
     }
 

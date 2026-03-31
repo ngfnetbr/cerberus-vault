@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Plus, Tag, Key, Trash2, Pencil, Check, X,
-  FolderOpen
+  FolderOpen, Star
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { addGroup, updateGroup, deleteGroup, generateId, type VaultGroup } from '@/lib/vault-store';
@@ -16,11 +16,12 @@ import IconPicker, { getIconComponent } from './IconPicker';
 interface VaultSidebarProps {
   groups: VaultGroup[];
   selectedGroupId: string | null;
-  selectedView: 'all' | 'group' | 'tags' | 'trash';
+  selectedView: 'all' | 'group' | 'tags' | 'favorites' | 'trash';
   entryCounts: Record<string, number>;
   totalCount: number;
+  favoriteCount: number;
   onSelectGroup: (groupId: string) => void;
-  onSelectView: (view: 'all' | 'tags' | 'trash') => void;
+  onSelectView: (view: 'all' | 'tags' | 'favorites' | 'trash') => void;
   onGroupsChanged: () => void;
 }
 
@@ -30,6 +31,7 @@ const VaultSidebar = ({
   selectedView,
   entryCounts,
   totalCount,
+  favoriteCount,
   onSelectGroup,
   onSelectView,
   onGroupsChanged,
@@ -98,6 +100,19 @@ const VaultSidebar = ({
           <Key className="w-4 h-4 shrink-0" />
           <span className="truncate flex-1 text-left">Todas as senhas</span>
           <span className="text-[10px] text-muted-foreground font-mono">{totalCount}</span>
+        </button>
+
+        <button
+          onClick={() => onSelectView('favorites')}
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
+            selectedView === 'favorites'
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
+          }`}
+        >
+          <Star className="w-4 h-4 shrink-0" />
+          <span className="truncate flex-1 text-left">Favoritos</span>
+          <span className="text-[10px] text-muted-foreground font-mono">{favoriteCount}</span>
         </button>
 
         {/* Groups header */}

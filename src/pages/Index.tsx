@@ -29,6 +29,7 @@ const Index = () => {
       onLock={() => setMasterPassword(null)}
       settings={settings}
       onSettingsChanged={setSettings}
+      onMasterPasswordChanged={setMasterPassword}
     />
   );
 };

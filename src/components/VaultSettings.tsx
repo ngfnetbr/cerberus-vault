@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Settings, Timer, Fingerprint } from 'lucide-react';
+import { Settings, Timer, Fingerprint, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { isBiometricSupported, isBiometricEnabled, disableBiometric, registerBiometric } from '@/lib/biometric';
+import { decrypt, encrypt, hashMasterPassword, verifyMasterPassword } from '@/lib/crypto';
+import { isBiometricSupported, isBiometricEnabled, disableBiometric, registerBiometric, updateBiometricPassword } from '@/lib/biometric';
+import { getEntries, getMasterHash, saveEntries, setMasterHash } from '@/lib/vault-store';
 import { useToast } from '@/hooks/use-toast';
 
 const AUTO_LOCK_OPTIONS = [
@@ -27,7 +30,9 @@ export function getSettings(): VaultSettings {
   try {
     const data = localStorage.getItem(SETTINGS_KEY);
     if (data) return JSON.parse(data);
-  } catch {}
+  } catch {
+    return { autoLockMinutes: 5 };
+  }
   return { autoLockMinutes: 5 };
 }
 
@@ -39,12 +44,17 @@ interface VaultSettingsDialogProps {
   settings: VaultSettings;
   onSettingsChanged: (settings: VaultSettings) => void;
   masterPassword?: string;
+  onMasterPasswordChanged?: (password: string) => void;
 }
 
-const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword }: VaultSettingsDialogProps) => {
+const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMasterPasswordChanged }: VaultSettingsDialogProps) => {
   const [open, setOpen] = useState(false);
   const [autoLock, setAutoLock] = useState(String(settings.autoLockMinutes));
   const [biometricOn, setBiometricOn] = useState(isBiometricEnabled());
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   const { toast } = useToast();
 
   const handleBiometricToggle = async (checked: boolean) => {
@@ -68,6 +78,68 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword }: Va
     saveSettings(updated);
     onSettingsChanged(updated);
     setOpen(false);
+  };
+
+  const handleChangeMasterPassword = async () => {
+    if (!masterPassword) {
+      toast({ title: 'Sessão inválida', description: 'Desbloqueie o cofre novamente.', variant: 'destructive' });
+      return;
+    }
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast({ title: 'Senha fraca', description: 'A nova senha mestra deve ter pelo menos 8 caracteres.', variant: 'destructive' });
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast({ title: 'Senhas não coincidem', description: 'Confirme a nova senha mestra corretamente.', variant: 'destructive' });
+      return;
+    }
+
+    const masterHash = getMasterHash();
+    if (!masterHash) {
+      toast({ title: 'Senha mestra não encontrada', variant: 'destructive' });
+      return;
+    }
+
+    setChangingPassword(true);
+
+    try {
+      const isCurrentPasswordValid = await verifyMasterPassword(currentPassword, masterHash);
+      if (!isCurrentPasswordValid) {
+        toast({ title: 'Senha atual incorreta', variant: 'destructive' });
+        return;
+      }
+
+      const entries = getEntries();
+      const reencryptedEntries = await Promise.all(entries.map(async (entry) => {
+        const plaintextPassword = await decrypt(entry.encryptedPassword, currentPassword);
+        const encryptedPassword = await encrypt(plaintextPassword, newPassword);
+
+        return {
+          ...entry,
+          encryptedPassword,
+        };
+      }));
+
+      saveEntries(reencryptedEntries);
+      setMasterHash(await hashMasterPassword(newPassword));
+      updateBiometricPassword(newPassword);
+      onMasterPasswordChanged?.(newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      toast({ title: 'Senha mestra alterada!', description: 'Todas as senhas foram recriptografadas com sucesso.' });
+    } catch {
+      toast({ title: 'Erro ao alterar a senha mestra', variant: 'destructive' });
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   return (
@@ -117,6 +189,40 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword }: Va
               </div>
             </div>
           )}
+
+          <div className="space-y-3 rounded-lg border border-border bg-vault-surface/50 p-3">
+            <Label className="flex items-center gap-2 text-sm">
+              <KeyRound className="w-4 h-4 text-muted-foreground" />
+              Alterar senha mestra
+            </Label>
+            <Input
+              type="password"
+              placeholder="Senha mestra atual"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="bg-vault-surface border-border"
+            />
+            <Input
+              type="password"
+              placeholder="Nova senha mestra"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="bg-vault-surface border-border"
+            />
+            <Input
+              type="password"
+              placeholder="Confirmar nova senha"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              className="bg-vault-surface border-border"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              As entradas existentes serão recriptografadas automaticamente com a nova senha mestra.
+            </p>
+            <Button type="button" variant="outline" onClick={handleChangeMasterPassword} disabled={changingPassword} className="w-full">
+              {changingPassword ? 'Alterando...' : 'Alterar senha mestra'}
+            </Button>
+          </div>
 
           <Button onClick={handleSave} className="w-full">Salvar</Button>
         </div>

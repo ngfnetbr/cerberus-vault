@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { encrypt, decrypt } from '@/lib/crypto';
-import { addEntry, updateEntry, generateId, getGroups, getTags, addTag, deleteTag, type VaultEntry } from '@/lib/vault-store';
+import { addEntry, updateEntry, generateId, getGroups, getTags, addTag, deleteTag, type VaultAuthType, type VaultEntry } from '@/lib/vault-store';
 import { useToast } from '@/hooks/use-toast';
 import PasswordStrength from './PasswordStrength';
 
@@ -23,6 +23,7 @@ interface VaultEntryFormProps {
 const VaultEntryForm = ({ masterPassword, entry, defaultGroupId, onSaved, onCancel }: VaultEntryFormProps) => {
   const [site, setSite] = useState('');
   const [username, setUsername] = useState('');
+  const [authType, setAuthType] = useState<VaultAuthType>('password');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [notes, setNotes] = useState('');
@@ -39,12 +40,23 @@ const VaultEntryForm = ({ masterPassword, entry, defaultGroupId, onSaved, onCanc
     if (entry) {
       setSite(entry.site);
       setUsername(entry.username);
+      setAuthType(entry.authType ?? 'password');
       setNotes(entry.notes);
       setGroupId(entry.groupId || 'general');
       setTags(entry.tags || []);
       decrypt(entry.encryptedPassword, masterPassword).then(setPassword).catch(() => {});
+    } else {
+      setSite('');
+      setUsername('');
+      setAuthType('password');
+      setPassword('');
+      setShowPassword(false);
+      setNotes('');
+      setGroupId(defaultGroupId || 'general');
+      setTags([]);
+      setTagInput('');
     }
-  }, [entry, masterPassword]);
+  }, [entry, masterPassword, defaultGroupId]);
 
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=';
@@ -68,21 +80,35 @@ const VaultEntryForm = ({ masterPassword, entry, defaultGroupId, onSaved, onCanc
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!site || !username || !password) {
+    if (!site || !username || (authType === 'password' && !password)) {
       toast({ title: 'Preencha todos os campos obrigatórios', variant: 'destructive' });
       return;
     }
 
     setLoading(true);
     try {
-      const encryptedPassword = await encrypt(password, masterPassword);
+      const encryptedPassword = await encrypt(authType === 'google' ? '' : password, masterPassword);
       const now = new Date().toISOString();
 
       if (entry) {
-        updateEntry(entry.id, { site, username, encryptedPassword, notes, groupId, tags, updatedAt: now });
+        updateEntry(entry.id, { site, username, authType, encryptedPassword, notes, groupId, tags, updatedAt: now });
         toast({ title: 'Entrada atualizada!' });
       } else {
-        addEntry({ id: generateId(), site, username, encryptedPassword, notes, groupId, tags, createdAt: now, updatedAt: now });
+        addEntry({
+          id: generateId(),
+          site,
+          username,
+          authType,
+          isFavorite: false,
+          useCount: 0,
+          lastUsedAt: null,
+          encryptedPassword,
+          notes,
+          groupId,
+          tags,
+          createdAt: now,
+          updatedAt: now,
+        });
         toast({ title: 'Entrada adicionada!' });
       }
       onSaved();
@@ -99,23 +125,45 @@ const VaultEntryForm = ({ masterPassword, entry, defaultGroupId, onSaved, onCanc
         <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input placeholder="Site (ex: github.com)" value={site} onChange={e => setSite(e.target.value)} className="pl-10 bg-vault-surface border-border" />
       </div>
+      <Select value={authType} onValueChange={(value) => setAuthType(value as VaultAuthType)}>
+        <SelectTrigger className="bg-vault-surface border-border">
+          <SelectValue placeholder="Tipo de acesso" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="password">Login com senha</SelectItem>
+          <SelectItem value="google">Login com Google</SelectItem>
+        </SelectContent>
+      </Select>
       <div className="relative">
         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Username / Email" value={username} onChange={e => setUsername(e.target.value)} className="pl-10 bg-vault-surface border-border" />
+        <Input
+          placeholder={authType === 'google' ? 'E-mail da conta Google' : 'Username / Email'}
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          className="pl-10 bg-vault-surface border-border"
+        />
       </div>
-      <div className="relative">
-        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input type={showPassword ? 'text' : 'password'} placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 pr-20 bg-vault-surface border-border font-mono" />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground transition-colors">
-            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-          <button type="button" onClick={generatePassword} className="text-muted-foreground hover:text-primary transition-colors">
-            <Shuffle className="w-4 h-4" />
-          </button>
+      {authType === 'password' ? (
+        <>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input type={showPassword ? 'text' : 'password'} placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 pr-20 bg-vault-surface border-border font-mono" />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground transition-colors">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+              <button type="button" onClick={generatePassword} className="text-muted-foreground hover:text-primary transition-colors">
+                <Shuffle className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <PasswordStrength password={password} />
+        </>
+      ) : (
+        <div className="rounded-lg border border-border bg-vault-surface/50 px-3 py-2 text-sm text-muted-foreground">
+          Esta entrada usa login com Google. Apenas o e-mail será necessário.
         </div>
-      </div>
-      <PasswordStrength password={password} />
+      )}
 
       {/* Group selector */}
       <div className="flex items-center gap-2">

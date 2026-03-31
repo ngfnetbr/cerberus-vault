@@ -8,11 +8,12 @@ import { useState } from 'react';
 interface MobileSidebarProps {
   groups: VaultGroup[];
   selectedGroupId: string | null;
-  selectedView: 'all' | 'group' | 'tags' | 'trash';
+  selectedView: 'all' | 'group' | 'tags' | 'favorites' | 'trash';
   entryCounts: Record<string, number>;
   totalCount: number;
+  favoriteCount: number;
   onSelectGroup: (groupId: string) => void;
-  onSelectView: (view: 'all' | 'tags' | 'trash') => void;
+  onSelectView: (view: 'all' | 'tags' | 'favorites' | 'trash') => void;
   onGroupsChanged: () => void;
 }
 

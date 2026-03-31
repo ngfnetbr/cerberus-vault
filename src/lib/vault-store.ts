@@ -8,10 +8,16 @@ export interface VaultGroup {
   order: number;
 }
 
+export type VaultAuthType = 'password' | 'google';
+
 export interface VaultEntry {
   id: string;
   site: string;
   username: string;
+  authType: VaultAuthType;
+  isFavorite: boolean;
+  useCount: number;
+  lastUsedAt: string | null;
   encryptedPassword: string;
   notes: string;
   groupId: string | null;
@@ -125,6 +131,10 @@ export function getEntries(): VaultEntry[] {
     // Migrate old entries without groupId/tags
     return entries.map(e => ({
       ...e,
+      authType: e.authType === 'google' ? 'google' : 'password',
+      isFavorite: e.isFavorite ?? false,
+      useCount: e.useCount ?? 0,
+      lastUsedAt: e.lastUsedAt ?? null,
       groupId: e.groupId ?? null,
       tags: e.tags ?? [],
     }));

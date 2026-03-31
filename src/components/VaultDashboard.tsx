@@ -4,10 +4,11 @@ import cerberusLogo from '@/assets/cerberus-logo.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import MobileSidebar from './MobileSidebar';
-import { getEntries, saveEntries, getGroups, saveGroups, getTags, saveTags, deleteTag, getMasterHash, setMasterHash, type VaultEntry, type VaultGroup } from '@/lib/vault-store';
+import { getEntries, saveEntries, getGroups, saveGroups, getTags, saveTags, deleteTag, getMasterHash, setMasterHash, updateEntry, type VaultEntry, type VaultGroup } from '@/lib/vault-store';
 import { useToast } from '@/hooks/use-toast';
 import { decrypt } from '@/lib/crypto';
 import { isFileSystemSupported, isFileLinked, pickDirectory, unlinkFile, loadFromFile, getLinkedFileName } from '@/lib/file-sync';
@@ -25,18 +26,21 @@ interface VaultDashboardProps {
   masterPassword: string;
   onLock: () => void;
   onSettingsChanged: (settings: VaultSettings) => void;
+  onMasterPasswordChanged: (password: string) => void;
   settings: VaultSettings;
 }
 
-const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }: VaultDashboardProps) => {
+const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, onMasterPasswordChanged, settings }: VaultDashboardProps) => {
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [groups, setGroups] = useState<VaultGroup[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  const [authFilter, setAuthFilter] = useState<'all' | 'google' | 'password'>('all');
+  const [sortBy, setSortBy] = useState<'alphabetical' | 'recent' | 'most-used' | 'updated'>('alphabetical');
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<VaultEntry | null>(null);
   const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({});
-  const [selectedView, setSelectedView] = useState<'all' | 'group' | 'tags' | 'trash'>('all');
+  const [selectedView, setSelectedView] = useState<'all' | 'group' | 'tags' | 'favorites' | 'trash'>('all');
   const [showExport, setShowExport] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
@@ -64,6 +68,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
   }, [loadAll, syncToFile, markDirty]);
 
   const decryptPassword = useCallback(async (entry: VaultEntry): Promise<string> => {
+    if (entry.authType === 'google') return '';
     if (decryptedPasswords[entry.id]) return decryptedPasswords[entry.id];
     const pw = await decrypt(entry.encryptedPassword, masterPassword);
     setDecryptedPasswords(prev => ({ ...prev, [entry.id]: pw }));
@@ -79,6 +84,11 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
     return counts;
   }, [entries]);
 
+  const favoriteCount = useMemo(
+    () => entries.filter(entry => entry.isFavorite).length,
+    [entries],
+  );
+
   const filteredEntries = useMemo(() => {
     let filtered = entries;
 
@@ -87,6 +97,8 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
       filtered = filtered.filter(e => (e.groupId || 'general') === selectedGroupId);
     } else if (selectedView === 'tags' && selectedTag) {
       filtered = filtered.filter(e => e.tags?.includes(selectedTag));
+    } else if (selectedView === 'favorites') {
+      filtered = filtered.filter(e => e.isFavorite);
     }
 
     // Filter by search
@@ -99,7 +111,61 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
       );
     }
 
-    return filtered;
+    if (authFilter !== 'all') {
+      filtered = filtered.filter(e => e.authType === authFilter);
+    }
+
+    const getTimestamp = (value: string | null | undefined) => (value ? new Date(value).getTime() : 0);
+    const alphabeticalSort = (a: VaultEntry, b: VaultEntry) =>
+      a.site.localeCompare(b.site, 'pt-BR', { sensitivity: 'base', numeric: true }) ||
+      a.username.localeCompare(b.username, 'pt-BR', { sensitivity: 'base', numeric: true });
+
+    return [...filtered].sort((a, b) => {
+      if (a.isFavorite !== b.isFavorite) {
+        return Number(b.isFavorite) - Number(a.isFavorite);
+      }
+
+      if (sortBy === 'recent') {
+        return getTimestamp(b.createdAt) - getTimestamp(a.createdAt) || alphabeticalSort(a, b);
+      }
+
+      if (sortBy === 'most-used') {
+        return (b.useCount ?? 0) - (a.useCount ?? 0) ||
+          getTimestamp(b.lastUsedAt) - getTimestamp(a.lastUsedAt) ||
+          alphabeticalSort(a, b);
+      }
+
+      if (sortBy === 'updated') {
+        return getTimestamp(b.updatedAt) - getTimestamp(a.updatedAt) || alphabeticalSort(a, b);
+      }
+
+      return alphabeticalSort(a, b);
+    });
+  }, [entries, selectedView, selectedGroupId, selectedTag, search, authFilter, sortBy]);
+
+  const authFilterCounts = useMemo(() => {
+    let filtered = entries;
+
+    if (selectedView === 'group' && selectedGroupId) {
+      filtered = filtered.filter(e => (e.groupId || 'general') === selectedGroupId);
+    } else if (selectedView === 'tags' && selectedTag) {
+      filtered = filtered.filter(e => e.tags?.includes(selectedTag));
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(e =>
+        e.site.toLowerCase().includes(q) ||
+        e.username.toLowerCase().includes(q) ||
+        e.tags?.some(t => t.includes(q))
+      );
+    }
+
+    return {
+      all: filtered.length,
+      google: filtered.filter(e => e.authType === 'google').length,
+      password: filtered.filter(e => e.authType === 'password').length,
+    };
   }, [entries, selectedView, selectedGroupId, selectedTag, search]);
 
   const handleSaved = () => {
@@ -116,13 +182,32 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
 
   const handleDeleted = () => { loadAndSync(); setDecryptedPasswords({}); };
 
+  const handleMasterPasswordUpdated = (password: string) => {
+    setDecryptedPasswords({});
+    onMasterPasswordChanged(password);
+    loadAndSync();
+  };
+
+  const handleToggleFavorite = (entry: VaultEntry) => {
+    updateEntry(entry.id, { isFavorite: !entry.isFavorite });
+    loadAndSync();
+  };
+
+  const handleRecordUsage = (entry: VaultEntry) => {
+    updateEntry(entry.id, {
+      useCount: (entry.useCount ?? 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    });
+    loadAndSync();
+  };
+
   const handleSelectGroup = (groupId: string) => {
     setSelectedView('group');
     setSelectedGroupId(groupId);
     setSelectedTag(null);
   };
 
-  const handleSelectView = (view: 'all' | 'tags' | 'trash') => {
+  const handleSelectView = (view: 'all' | 'tags' | 'favorites' | 'trash') => {
     setSelectedView(view);
     setSelectedGroupId(null);
     if (view !== 'tags') setSelectedTag(null);
@@ -229,6 +314,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
       return groups.find(g => g.id === selectedGroupId)?.name || 'Grupo';
     }
     if (selectedView === 'tags') return 'Tags';
+    if (selectedView === 'favorites') return 'Favoritos';
     return 'Todas as senhas';
   }, [selectedView, selectedGroupId, groups]);
 
@@ -286,6 +372,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
               selectedView={selectedView}
               entryCounts={entryCounts}
               totalCount={entries.length}
+              favoriteCount={favoriteCount}
               onSelectGroup={handleSelectGroup}
               onSelectView={handleSelectView}
               onGroupsChanged={loadAndSync}
@@ -338,7 +425,12 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
                 </Tooltip>
               </TooltipProvider>
             )}
-            <VaultSettingsDialog settings={settings} onSettingsChanged={onSettingsChanged} masterPassword={masterPassword} />
+            <VaultSettingsDialog
+              settings={settings}
+              onSettingsChanged={onSettingsChanged}
+              masterPassword={masterPassword}
+              onMasterPasswordChanged={handleMasterPasswordUpdated}
+            />
             <Button variant="ghost" size="icon" onClick={() => setShowExport(true)} className="text-muted-foreground hover:text-foreground h-8 w-8" title="Exportar">
               <Download className="w-4 h-4" />
             </Button>
@@ -362,6 +454,7 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
             selectedView={selectedView}
             entryCounts={entryCounts}
             totalCount={entries.length}
+            favoriteCount={favoriteCount}
             onSelectGroup={handleSelectGroup}
             onSelectView={handleSelectView}
             onGroupsChanged={loadAndSync}
@@ -439,9 +532,44 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
                   className="pl-10 bg-vault-surface border-border"
                 />
               </div>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                <SelectTrigger className="w-[180px] bg-vault-surface border-border">
+                  <SelectValue placeholder="Ordenação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="alphabetical">Alfabética</SelectItem>
+                  <SelectItem value="recent">Recentes</SelectItem>
+                  <SelectItem value="most-used">Mais usados</SelectItem>
+                  <SelectItem value="updated">Última edição</SelectItem>
+                </SelectContent>
+              </Select>
               <Button onClick={() => { setEditingEntry(null); setShowForm(true); }} className="shrink-0">
                 <Plus className="w-4 h-4 md:mr-2" />
                 <span className="hidden md:inline">Adicionar</span>
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              <Button
+                variant={authFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setAuthFilter('all')}
+              >
+                Todas ({authFilterCounts.all})
+              </Button>
+              <Button
+                variant={authFilter === 'google' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setAuthFilter('google')}
+              >
+                Google ({authFilterCounts.google})
+              </Button>
+              <Button
+                variant={authFilter === 'password' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setAuthFilter('password')}
+              >
+                Com senha ({authFilterCounts.password})
               </Button>
             </div>
 
@@ -461,6 +589,8 @@ const VaultDashboard = ({ masterPassword, onLock, onSettingsChanged, settings }:
                     onDecrypt={decryptPassword}
                     onEdit={handleEdit}
                     onDeleted={handleDeleted}
+                    onToggleFavorite={handleToggleFavorite}
+                    onRecordUsage={handleRecordUsage}
                   />
                 ))}
               </div>
