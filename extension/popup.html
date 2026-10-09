@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cerberus Vault</title><link rel="stylesheet" href="popup.css"></head>
+<body><main><header><img src="icons/icon-128.png" alt=""><div><h1>Cerberus</h1><p>Vault Beta</p></div></header>
+<section id="import-view" hidden><h2>Importe seu cofre</h2><p>Exporte um JSON pelo Cerberus e selecione o arquivo aqui.</p><label class="button primary">Selecionar backup<input id="vault-file" type="file" accept="application/json,.json"></label></section>
+<section id="unlock-view" hidden><h2>Cofre bloqueado</h2><form id="unlock-form"><input id="master-password" type="password" placeholder="Senha mestra" autocomplete="current-password" required><button class="primary" type="submit">Desbloquear</button></form><button id="replace-vault" class="link" type="button">Importar outro backup</button></section>
+<section id="entries-view" hidden><div class="section-title"><div><h2 id="site-title">Credenciais</h2><p id="site-subtitle"></p></div><button id="lock" class="icon" title="Bloquear">Bloquear</button></div><div id="entries"></div><button id="replace-vault-unlocked" class="link" type="button">Atualizar backup</button></section>
+<p id="message" role="status"></p><footer>Preenchimento somente após clique · bloqueio em 5 minutos</footer></main><script src="popup.js"></script></body></html>
