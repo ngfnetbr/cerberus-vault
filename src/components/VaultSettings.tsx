@@ -86,8 +86,8 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMa
       return;
     }
 
-    if (!currentPassword || !newPassword || !confirmNewPassword) {
-      toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+    if (!newPassword || !confirmNewPassword) {
+      toast({ title: 'Preencha a nova senha e a confirmação', variant: 'destructive' });
       return;
     }
 
@@ -110,7 +110,10 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMa
     setChangingPassword(true);
 
     try {
-      const isCurrentPasswordValid = await verifyMasterPassword(currentPassword, masterHash);
+      // An unlocked vault already holds the verified password in memory. This
+      // also lets legacy biometric users migrate to a new password they know.
+      const decryptionPassword = currentPassword || masterPassword;
+      const isCurrentPasswordValid = await verifyMasterPassword(decryptionPassword, masterHash);
       if (!isCurrentPasswordValid) {
         toast({ title: 'Senha atual incorreta', variant: 'destructive' });
         return;
@@ -118,7 +121,7 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMa
 
       const entries = getEntries();
       const reencryptedEntries = await Promise.all(entries.map(async (entry) => {
-        const plaintextPassword = await decrypt(entry.encryptedPassword, currentPassword);
+        const plaintextPassword = await decrypt(entry.encryptedPassword, decryptionPassword);
         const encryptedPassword = await encrypt(plaintextPassword, newPassword);
 
         return {
@@ -200,7 +203,7 @@ const VaultSettingsDialog = ({ settings, onSettingsChanged, masterPassword, onMa
             </Label>
             <Input
               type="password"
-              placeholder="Senha mestra atual"
+              placeholder="Senha atual (opcional se o cofre já está aberto)"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="bg-vault-surface border-border"
